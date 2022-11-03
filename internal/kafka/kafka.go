@@ -21,7 +21,7 @@ type Consumer struct {
 }
 
 func NewConsumer(config *sarama.Config, brokers []string, readChan chan *ReadModel, logg *log.Logger) *Consumer {
-    logDataDog = logg
+	logDataDog = logg
 	return &Consumer{
 		config:   config,
 		readChan: readChan,
@@ -30,8 +30,8 @@ func NewConsumer(config *sarama.Config, brokers []string, readChan chan *ReadMod
 }
 
 type ReadModel struct {
-	Session     sarama.ConsumerGroupSession
-	Message     *sarama.ConsumerMessage
+	Session sarama.ConsumerGroupSession
+	Message *sarama.ConsumerMessage
 }
 
 func (c *Consumer) Consume(ctx context.Context, group string, topics []string, doneChan chan bool) {
@@ -66,7 +66,6 @@ func (c *Consumer) Setup(sarama.ConsumerGroupSession) error {
 func (c *Consumer) Cleanup(sarama.ConsumerGroupSession) error {
 	return nil
 }
-
 
 // ConsumeClaim must start a consumer loop of ConsumerGroupClaim's Messages().
 func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {

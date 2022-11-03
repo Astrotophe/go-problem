@@ -2,10 +2,10 @@ package logger
 
 import (
 	"fmt"
-	"os"
-	"io"
 	nested "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/sirupsen/logrus"
+	"io"
+	"os"
 )
 
 func NewLogger(AsCLI bool) *logrus.Logger {
@@ -20,7 +20,7 @@ func NewLogger(AsCLI bool) *logrus.Logger {
 		},
 	}
 
-    filename := "rocket.log"
+	filename := "rocket.log"
 	if os.Getenv("ROCKET_LOG_PATH") == "" {
 		os.Setenv("ROCKET_LOG_PATH", filename)
 	}
@@ -28,12 +28,12 @@ func NewLogger(AsCLI bool) *logrus.Logger {
 	if err != nil {
 		fmt.Printf("error opening file: %v", err)
 	}
-	if (AsCLI == true) {
-	    mw := io.MultiWriter(os.Stdout, f)
-	    l.SetOutput(mw)
-    } else {
-    	l.SetOutput(f)
-    }
+	if AsCLI == true {
+		mw := io.MultiWriter(os.Stdout, f)
+		l.SetOutput(mw)
+	} else {
+		l.SetOutput(f)
+	}
 	l.SetFormatter(&logrus.JSONFormatter{
 		FieldMap: logrus.FieldMap{
 			logrus.FieldKeyTime:  "timestamp",

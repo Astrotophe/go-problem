@@ -6,20 +6,20 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"errors"
-	"strings"
-	"os"
-	"os/signal"
-	"syscall"
-	"strconv"
+	"fmt"
 	"github.com/Shopify/sarama"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"rocket-storagemanager/internal/kafka"
+	"os"
+	"os/signal"
 	"rocket-storagemanager/internal/filesystem"
-    "rocket-storagemanager/internal/model/config"
-    "rocket-storagemanager/internal/utils"
+	"rocket-storagemanager/internal/kafka"
+	"rocket-storagemanager/internal/model/config"
+	"rocket-storagemanager/internal/utils"
+	"strconv"
+	"strings"
+	"syscall"
 )
 
 var cfgFile string
@@ -35,93 +35,93 @@ var (
 var logDataDog *log.Logger
 
 func getConfFromEnv() (config.Params, error) {
-    brokerEnv := os.Getenv("KAFKA_BROKERS_SERVERS");
-    nbConsumerStrEnv := os.Getenv("KAFKA_CONSUMER_NUMBER");
-    relativePathEnv := os.Getenv("ROCKET_WORKSPACE_PATH");
-    topicEnv := os.Getenv("KAFKA_TOPIC_NAME");
-    if (brokerEnv == "" || nbConsumerStrEnv == "" || relativePathEnv == "" || topicEnv == ""){
-        logDataDog.Error("ERROR: Missing one or multiple env variables, brokerEnv:", brokerEnv,
-        "nbConsumerStrEnv:", nbConsumerStrEnv, "relativePathEnv:", relativePathEnv, "topicEnv:", topicEnv)
-    	return config.Params{}, errors.New("Missing one or multiple env variables")
-    }
-    nbEnv, err := strconv.ParseInt(nbConsumerStrEnv, 10, 16)
-    if err != nil {
-        logDataDog.Error("ERROR: Invalid consumer number argument:", err)
-        return config.Params{}, errors.New("Invalid consumer number argument")
-    }
-    nbConsumerIntEnv := int(nbEnv)
-        if (nbConsumerIntEnv > 20) {
-            logDataDog.Error("ERROR: Too many consumers, max 20")
-            return config.Params{}, errors.New("Too many consumers");
-    }
-    paramsFromEnv := config.Params{MarkOnErrorFlag: true, MarkOnNotFoundFlag: true, BrokersUrls: brokerEnv,
-        ConsumersNumber: nbConsumerIntEnv, RelativePath: relativePathEnv, Topic: topicEnv, AsCLI: false}
-    return paramsFromEnv, nil
+	brokerEnv := os.Getenv("KAFKA_BROKERS_SERVERS")
+	nbConsumerStrEnv := os.Getenv("KAFKA_CONSUMER_NUMBER")
+	relativePathEnv := os.Getenv("ROCKET_WORKSPACE_PATH")
+	topicEnv := os.Getenv("KAFKA_TOPIC_NAME")
+	if brokerEnv == "" || nbConsumerStrEnv == "" || relativePathEnv == "" || topicEnv == "" {
+		logDataDog.Error("ERROR: Missing one or multiple env variables, brokerEnv:", brokerEnv,
+			"nbConsumerStrEnv:", nbConsumerStrEnv, "relativePathEnv:", relativePathEnv, "topicEnv:", topicEnv)
+		return config.Params{}, errors.New("Missing one or multiple env variables")
+	}
+	nbEnv, err := strconv.ParseInt(nbConsumerStrEnv, 10, 16)
+	if err != nil {
+		logDataDog.Error("ERROR: Invalid consumer number argument:", err)
+		return config.Params{}, errors.New("Invalid consumer number argument")
+	}
+	nbConsumerIntEnv := int(nbEnv)
+	if nbConsumerIntEnv > 20 {
+		logDataDog.Error("ERROR: Too many consumers, max 20")
+		return config.Params{}, errors.New("Too many consumers")
+	}
+	paramsFromEnv := config.Params{MarkOnErrorFlag: true, MarkOnNotFoundFlag: true, BrokersUrls: brokerEnv,
+		ConsumersNumber: nbConsumerIntEnv, RelativePath: relativePathEnv, Topic: topicEnv, AsCLI: false}
+	return paramsFromEnv, nil
 }
 
 func getArgsAndFlags(args []string, cmd *cobra.Command) (config.Params, error) {
-    // NO ARGS then loading conf from env variables
-    if (len(args) == 0) {
-        logDataDog = logger.NewLogger(false)
-        return getConfFromEnv()
-    }
-    logDataDog = logger.NewLogger(true)
-    // At least one arg then loading conf as parameters, must have 4
-    if (len(args) != 4) {
-        logDataDog.Error("ERROR: Invalid argument's number, must have 4, brokers url seprated by comma, number of kafka consumers, relativePath and topic")
-        return config.Params{}, errors.New("Invalid arguments number");
-    }
-    brokers := args[0]
-    nb, err := strconv.ParseInt(args[1], 10, 16)
-    if err != nil {
-        logDataDog.Error("ERROR: Invalid consumer number argument:", err)
-        return config.Params{}, errors.New("Invalid consumer number argument")
-    }
-    nbConsumer := int(nb)
-    if (nbConsumer > 20) {
-        logDataDog.Error("ERROR: Too many consumers, max 20")
-        return config.Params{}, errors.New("Too many consumers");
-    }
-    relativePath := args[2]
-    topic := args[3]
-    params := config.Params{MarkOnErrorFlag: false, MarkOnNotFoundFlag: false,
-       BrokersUrls: brokers, ConsumersNumber: nbConsumer, RelativePath: relativePath, Topic: topic, AsCLI: true}
-    mstatus, _ := cmd.Flags().GetBool("markOnError")
-     if mstatus {
-        params.MarkOnErrorFlag  = true
-     }
-     ntstatus, _ := cmd.Flags().GetBool("markOnNotFound")
-     if ntstatus {
-        params.MarkOnNotFoundFlag = true
-    }
-    return params, nil
+	// NO ARGS then loading conf from env variables
+	if len(args) == 0 {
+		logDataDog = logger.NewLogger(false)
+		return getConfFromEnv()
+	}
+	logDataDog = logger.NewLogger(true)
+	// At least one arg then loading conf as parameters, must have 4
+	if len(args) != 4 {
+		logDataDog.Error("ERROR: Invalid argument's number, must have 4, brokers url seprated by comma, number of kafka consumers, relativePath and topic")
+		return config.Params{}, errors.New("Invalid arguments number")
+	}
+	brokers := args[0]
+	nb, err := strconv.ParseInt(args[1], 10, 16)
+	if err != nil {
+		logDataDog.Error("ERROR: Invalid consumer number argument:", err)
+		return config.Params{}, errors.New("Invalid consumer number argument")
+	}
+	nbConsumer := int(nb)
+	if nbConsumer > 20 {
+		logDataDog.Error("ERROR: Too many consumers, max 20")
+		return config.Params{}, errors.New("Too many consumers")
+	}
+	relativePath := args[2]
+	topic := args[3]
+	params := config.Params{MarkOnErrorFlag: false, MarkOnNotFoundFlag: false,
+		BrokersUrls: brokers, ConsumersNumber: nbConsumer, RelativePath: relativePath, Topic: topic, AsCLI: true}
+	mstatus, _ := cmd.Flags().GetBool("markOnError")
+	if mstatus {
+		params.MarkOnErrorFlag = true
+	}
+	ntstatus, _ := cmd.Flags().GetBool("markOnNotFound")
+	if ntstatus {
+		params.MarkOnNotFoundFlag = true
+	}
+	return params, nil
 }
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "rocket-storagemanager",
 	Short: "Rocket Storage Manager executes filesystem commands and stornext commands",
-	Long: `Rocket Storage Manager reads kafka workflow end events in order to cleanse the filesystem storage`,
+	Long:  `Rocket Storage Manager reads kafka workflow end events in order to cleanse the filesystem storage`,
 
 	Run: func(cmd *cobra.Command, args []string) {
-	    params, err := getArgsAndFlags(args, cmd);
-	    if err != nil {
-	        os.Exit(1)
-	    }
-	    logDataDog.Info("STARTING with config, brokers urls: ", params.BrokersUrls,
-	        " ,Consumer numbers: ", params.ConsumersNumber,
-	        " ,Selected workspace relativePath: ", params.RelativePath,
-	        " ,topic: ", params.Topic,
-	        " ,Run as a Service: ", !params.AsCLI,
-	        " ,Marking message on error: ", params.MarkOnErrorFlag,
-	        " ,Marking message on not found: ", params.MarkOnNotFoundFlag)
+		params, err := getArgsAndFlags(args, cmd)
+		if err != nil {
+			os.Exit(1)
+		}
+		logDataDog.Info("STARTING with config, brokers urls: ", params.BrokersUrls,
+			" ,Consumer numbers: ", params.ConsumersNumber,
+			" ,Selected workspace relativePath: ", params.RelativePath,
+			" ,topic: ", params.Topic,
+			" ,Run as a Service: ", !params.AsCLI,
+			" ,Marking message on error: ", params.MarkOnErrorFlag,
+			" ,Marking message on not found: ", params.MarkOnNotFoundFlag)
 		ctx, cancel := context.WithCancel(context.Background())
 		readChan := make(chan *kafka.ReadModel, 30)
 		defer close(readChan)
 		doneConsumeChan := make(chan bool)
 		defer close(doneConsumeChan)
 		finalDoneChan := make(chan bool)
-        defer close(finalDoneChan)
+		defer close(finalDoneChan)
 
 		consumer := kafka.NewConsumer(kafkaConfig(), strings.Split(params.BrokersUrls, ","), readChan, logDataDog)
 
@@ -140,10 +140,10 @@ var rootCmd = &cobra.Command{
 		)
 		defer signal.Stop(sigc)
 		select {
-		    case <-sigc:
-			    for i := 0; i < params.ConsumersNumber; i++ {
-			        cancel()
-			    }
+		case <-sigc:
+			for i := 0; i < params.ConsumersNumber; i++ {
+				cancel()
+			}
 		}
 		<-finalDoneChan
 	},
@@ -159,8 +159,8 @@ func Execute() {
 }
 
 func init() {
-    rootCmd.Flags().BoolP("markOnError", "e", false, "Mark message on errors except for the not found error")
-    rootCmd.Flags().BoolP("markOnNotFound", "n", false, "Mark message on not found errors")
+	rootCmd.Flags().BoolP("markOnError", "e", false, "Mark message on errors except for the not found error")
+	rootCmd.Flags().BoolP("markOnNotFound", "n", false, "Mark message on not found errors")
 }
 
 func kafkaConfig() *sarama.Config {
