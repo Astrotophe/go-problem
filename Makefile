@@ -61,9 +61,6 @@ go-lint:
 	@echo "  >  Running go linter..."
 	golint ./...
 
-go-install:
-	@GOBIN=$(GOBIN) go install $(GOFILES)
-
 go-clean:
 	@echo "  >  Cleaning build cache"
 	@GOBIN=$(GOBIN) go clean

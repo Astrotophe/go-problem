@@ -6,26 +6,30 @@ package kafka
 
 import (
 	"context"
-	"fmt"
 	"github.com/Shopify/sarama"
 	log "github.com/sirupsen/logrus"
+	"sync"
 )
 
-var logDataDog *log.Logger
-
-// Consumer represents a Sarama consumer group consumer
-type Consumer struct {
+// consumer represents a Sarama consumer group consumer
+type consumer struct {
 	config   *sarama.Config
 	brokers  []string
 	readChan chan *ReadModel
+	logger   *log.Logger
 }
 
-func NewConsumer(config *sarama.Config, brokers []string, readChan chan *ReadModel, logg *log.Logger) *Consumer {
-	logDataDog = logg
-	return &Consumer{
+type Consumer interface {
+	sarama.ConsumerGroupHandler
+	Consume(ctx context.Context, group string, topics []string, wg *sync.WaitGroup)
+}
+
+func NewConsumer(config *sarama.Config, brokers []string, readChan chan *ReadModel, logger *log.Logger) Consumer {
+	return &consumer{
 		config:   config,
 		readChan: readChan,
 		brokers:  brokers,
+		logger:   logger,
 	}
 }
 
@@ -34,45 +38,55 @@ type ReadModel struct {
 	Message *sarama.ConsumerMessage
 }
 
-func (c *Consumer) Consume(ctx context.Context, group string, topics []string, doneChan chan bool) {
+func (c *consumer) Consume(ctx context.Context, group string, topics []string, wg *sync.WaitGroup) {
 	client, err := sarama.NewConsumerGroup(c.brokers, group, c.config)
 	if err != nil {
-		logDataDog.Error("Error creating consumer group client: %v", err)
+		c.logger.WithError(err).Error("Error creating consumer group client")
 	}
-	done := false
-	for !done {
+	for {
 		select {
 		case <-ctx.Done():
 			err := client.Close()
 			if err != nil {
-				logDataDog.Error("ERROR: Failed to close Kafka client:", err)
+				c.logger.WithError(err).Error("ERROR: Failed to close Kafka client")
 			}
-			done = true
+			wg.Done()
+			return
 		default:
 			if err := client.Consume(ctx, topics, c); err != nil {
-				logDataDog.Error("Error from consumer: %v", err)
+				c.logger.WithError(err).Error("Error from consumer")
 			}
 		}
 	}
-	doneChan <- true
 }
 
 // Setup is run at the beginning of a new session, before ConsumeClaim
-func (c *Consumer) Setup(sarama.ConsumerGroupSession) error {
+func (c *consumer) Setup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
 // Cleanup is run at the end of a session, once all ConsumeClaim goroutines have exited
-func (c *Consumer) Cleanup(sarama.ConsumerGroupSession) error {
+func (c *consumer) Cleanup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
 // ConsumeClaim must start a consumer loop of ConsumerGroupClaim's Messages().
-func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-	for message := range claim.Messages() {
-		logDataDog.Info(fmt.Sprintf("_______ New message claimed: value = %s, timestamp = %v, topic = %s", string(message.Value), message.Timestamp, message.Topic))
-		c.readChan <- &ReadModel{session, message}
-	}
+func (c *consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+	// NOTE:
+	// Do not move the code below to a goroutine.
+	// The `ConsumeClaim` itself is called within a goroutine, see:
+	// https://github.com/Shopify/sarama/blob/main/consumer_group.go#L27-L29
+	for {
+		select {
+		case message := <-claim.Messages():
+			c.logger.Infof("_______ New message claimed: value = %s, timestamp = %v, topic = %s", string(message.Value), message.Timestamp, message.Topic)
+			c.readChan <- &ReadModel{session, message}
 
-	return nil
+		// Should return when `session.Context()` is done.
+		// If not, will raise `ErrRebalanceInProgress` or `read tcp <ip>:<port>: i/o timeout` when kafka rebalance. see:
+		// https://github.com/Shopify/sarama/issues/1192
+		case <-session.Context().Done():
+			return nil
+		}
+	}
 }

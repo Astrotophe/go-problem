@@ -19,6 +19,7 @@ import (
 	"rocket-storagemanager/internal/utils"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 )
 
@@ -116,19 +117,25 @@ var rootCmd = &cobra.Command{
 			" ,Marking message on error: ", params.MarkOnErrorFlag,
 			" ,Marking message on not found: ", params.MarkOnNotFoundFlag)
 		ctx, cancel := context.WithCancel(context.Background())
-		readChan := make(chan *kafka.ReadModel, 30)
+		// The number of events to buffer in internal and external channels. This
+		// permits the producer and consumer to continue processing some messages
+		// in the background while user code is working, greatly improving throughput.
+		// Defaults to 256.
+		//ChannelBufferSize int
+		readChan := make(chan *kafka.ReadModel, 256)
 		defer close(readChan)
-		doneConsumeChan := make(chan bool)
-		defer close(doneConsumeChan)
-		finalDoneChan := make(chan bool)
-		defer close(finalDoneChan)
 
+		wg := &sync.WaitGroup{}
+
+		wg.Add(params.ConsumersNumber)
 		consumer := kafka.NewConsumer(kafkaConfig(), strings.Split(params.BrokersUrls, ","), readChan, logDataDog)
-
 		for i := 0; i < params.ConsumersNumber; i++ {
-			go consumer.Consume(ctx, group, []string{params.Topic}, doneConsumeChan)
+			go consumer.Consume(ctx, group, []string{params.Topic}, wg)
 		}
-		go filesystem.RunInstance(readChan, doneConsumeChan, finalDoneChan, &params, logDataDog)
+
+		wg.Add(1)
+		filesys := filesystem.New(params, logDataDog)
+		go filesys.Run(ctx, readChan, wg)
 
 		// Listen system signal to stop goroutines by context
 		sigc := make(chan os.Signal, 1)
@@ -141,11 +148,9 @@ var rootCmd = &cobra.Command{
 		defer signal.Stop(sigc)
 		select {
 		case <-sigc:
-			for i := 0; i < params.ConsumersNumber; i++ {
-				cancel()
-			}
+			cancel()
+			wg.Wait()
 		}
-		<-finalDoneChan
 	},
 }
 
